@@ -17,6 +17,11 @@
 
    second' = flip (second 0)
 -}
+\func second (_ y _ : Nat) => y
+\func apply (f : Nat -> Nat) (x : Nat) => f x
+\func compose (f g : Nat -> Nat) (x : Nat) => f (g x)
+\func flip (f : Nat -> Nat -> Nat) (x y : Nat) => f y x
+\func second' => flip (second 0)
 
 -- 3. Расставьте приоритеты функций f1, f2, f3, f4, f5 и f6 так, чтобы функция test проходила тайпчекинг.
 
@@ -24,9 +29,9 @@
 
 \func f1 (x y : Nat) => x
 \func f2 : Nat => 0
-\func f3 (f : Nat -> Nat) (z : Nat) : Int => 0
+\func \infix 3 f3 (f : Nat -> Nat) (z : Nat) : Int => 0
 \func f4 : Nat => 0
-\func f5 => f1
+\func \infix 5 f5 => f1
 \func f6 => f4
 
 \func test => f1 f2 f3 f4 f5 f6
@@ -37,21 +42,50 @@
    if True t _ = t
    if False _ e = e
 -}
+\func if' (c t e : Bool) : Bool \elim c
+  | true => t
+  | false => e
 
 -- 5. Определите || через if.
 
-\func \infixr 2 || (x y : Bool) : Bool => {?}
+\func \infixr 2 || (x y : Bool) : Bool => if' x true y
 
 -- 6. Определите возведение в степень и факториал для натуральных чисел.
 
 \open Nat \hiding (-,div) -- Здесь лежат + и *.
 
-\func \infixr 8 ^ (x y : Nat) => {?}
+\func \infixr 8 ^ (x y : Nat) : Nat \elim y
+  | zero => 1
+  | suc n => (x ^ n) * x
 
-\func fac (x : Nat) => {?}
+\func fac (x : Nat) : Nat
+  | zero => 1
+  | suc n => (fac n) * (suc n)
 
 -- 7. Определите mod и gcd.
 
-\func mod (x y : Nat) => {?}
+\func mod (x y : Nat) => mod' x x y
+  \where
+    \func mod' (s x y : Nat) : Nat \elim s
+      | 0 => 0
+      | suc s => if (x < y) x (mod' s (x - y) y)
 
-\func gcd (x y : Nat) => {?}
+\func gcd (x y : Nat) => gcd' (x + y) x y
+  \where
+    \func gcd' (s x y : Nat) : Nat \elim s, x
+      | 0, _ => 0
+      | _, 0 => y
+      | suc s, x => if (x < y) (gcd' s (mod y x) x) (gcd' s (mod x y) y)
+
+\func modTest1 : mod 100 5 = 0 => idp
+\func modTest2 : mod 100 3 = 1 => idp
+\func modTest3 : mod 3 5 = 3 => idp
+\func modTest4 : mod 100 0 = 0 => idp
+\func modTest5 : mod 5 5 = 0 => idp
+
+\func gcdTest1 : gcd 4 6 = 2 => idp
+\func gcdTest2 : gcd 7 7 = 7 => idp
+\func gcdTest3 : gcd 4 8 = 4 => idp
+\func gcdTest4 : gcd 0 5 = 5 => idp
+\func gcdTest5 : gcd 1 7 = 1 => idp
+\func gcdTest6 : gcd 3 8 = 1 => idp
