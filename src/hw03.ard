@@ -30,24 +30,24 @@
 
 -- 3. Реализуйте аналоги функции map для vec и Vec.
 
-\func map {A B : \Type} (f : A -> B) (n : Nat) (xs : vec A n) : vec B n \elim n
+\func map {A B : \Type} {n : Nat} (f : A -> B) (xs : vec A n) : vec B n \elim n
   | 0 => ()
-  | suc n => (f xs.1, map f n xs.2)
+  | suc n => (f xs.1, map f xs.2)
 
-\func map' {A B : \Type} (f : A -> B) (n : Nat) (xs : Vec A n) : Vec B n \elim n, xs
+\func map' {A B : \Type} {n : Nat} (f : A -> B) (xs : Vec A n) : Vec B n \elim n, xs
   | 0, _ => vnil
-  | suc n, vcons a xs => vcons (f a) (map' f n xs)
+  | suc n, vcons a xs => vcons (f a) (map' f xs)
 
 -- 4. Реализуйте аналоги функции zipWith для vec и Vec.
 --    Функция должна принимать вектора одинаковой длины.
 
-\func zipWith {A B : \Type} (n : Nat) (xs : vec A n) (ys : vec B n) : vec (\Sigma A B) n \elim n
+\func zipWith {A B : \Type} {n : Nat} (xs : vec A n) (ys : vec B n) : vec (\Sigma A B) n \elim n
   | 0 => ()
-  | suc n => ((xs.1, ys.1), zipWith n xs.2 ys.2)
+  | suc n => ((xs.1, ys.1), zipWith xs.2 ys.2)
 
-\func zipWith' {A B : \Type} (n : Nat) (xs : Vec A n) (ys : Vec B n) : Vec (\Sigma A B) n \elim n, xs, ys
+\func zipWith' {A B : \Type} {n : Nat} (xs : Vec A n) (ys : Vec B n) : Vec (\Sigma A B) n \elim n, xs, ys
   | 0, _, _ => vnil
-  | suc n, vcons a xs, vcons b ys => vcons (a, b) (zipWith' n xs ys)
+  | suc n, vcons a xs, vcons b ys => vcons (a, b) (zipWith' xs ys)
 
 -- 5. Определите конгруэнтность для функций двух аргументов через transport.
 --    Можно использовать любые функции, определенные через transport.
@@ -93,29 +93,45 @@
 --     Функция, преобразующая Vec A n в Fin n -> A, была реализована на лекции.
 --     Реализуйте обратную функцию.
 
-\func coin {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n => {?}
+\func coin {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n \elim n
+  | 0 => vnil
+  | suc n => vcons (f fzero) (coin (\lam x => f (fsuc x)))
 
 -- Optional task
 -- 10. Определите тип матриц и ряд функций над ними.
 
-\func Mat (A : \Type) (n m : Nat) : \Type => {?}
+\func Mat (A : \Type) (n m : Nat) : \Type => (Fin n) -> (Fin m) -> A
 
 -- диагональная матрица с элементами e на диагонали и z на остальных позициях.
 
-\func diag {A : \Type} (z e : A) (n : Nat) : Mat A n n => {?}
+\func diag {A : \Type} (z e : A) (n : Nat) : Mat A n n \elim n
+  | 0 => (\lam y x => Fin-absurd y)
+  | suc n => (\lam y x => \case y, x \with {
+    | fzero, fzero => e
+    | fzero, fsuc x => z
+    | fsuc y, fzero => z
+    | fsuc y, fsuc x => (diag z e n) y x
+  })
 
 -- транспонирование матриц
 
-\func transpose {A : \Type} {n m : Nat} (M : Mat A n m) : Mat A m n => {?}
+\func transpose {A : \Type} {n m : Nat} (M : Mat A n m) : Mat A m n => (\lam y x => M x y)
 
 -- сложение матриц
 
-\func matAdd {A : \Type} (add : A -> A -> A) (n m : Nat) (M N : Mat A n m) : Mat A n m => {?}
+\func matAdd {A : \Type} (add : A -> A -> A) (n m : Nat) (M N : Mat A n m) : Mat A n m =>
+  (\lam y x => add (M y x) (N y x))
+
+\func sum {A : \Type} {n : Nat} (z : A) (add : A -> A -> A) (xs : Vec A n) : A \elim n, xs
+  | 0, _ => z
+  | suc _, vcons a xs => add a (sum z add xs)
 
 -- умножение матриц
 
 -- z ─ нейтральный элемент по сложению.
-\func matMul {A : \Type} (z : A) (add mul : A -> A -> A) (n m k : Nat) (M : Mat A n m) (N : Mat A m k) : Mat A n k => {?}
+\func matMul {A : \Type} (z : A) (add mul : A -> A -> A) (n m k : Nat) (M : Mat A n m) (N : Mat A m k) : Mat A n k =>
+  (\lam y x => sum z add (map' (\lam a => mul a.1 a.2)
+      (zipWith' (coin (M y)) (coin (\lam z => N z x)))))
 
 -- 11. Докажите, что reverse (reverse xs) = xs, где reverse определен через ++.
 
