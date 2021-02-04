@@ -1,10 +1,17 @@
 \import Utils
+\import lect02 (id)
 \import lect03 (+-comm)
+\import lect04 (Nat-elim, Nat-rec, v++-assoc)
 \open Nat \hiding (<=)
 
 -- 1. Определите факториал через Nat-rec.
 
+\func fac (x : Nat) : Nat => Nat-rec Nat 1 (\lam n res => res * (suc n)) x
+
 -- 2. Докажите ассоциативность сложения для натуральных чисел через Nat-elim.
+
+\func +-assoc (x y z : Nat) : (x + y) + z = x + (y + z) =>
+  Nat-elim (\lam z' => (x + y) + z' = x + (y + z')) idp (\lam _ res => pmap suc res) z
 
 -- 3. Определите рекурсор и элиминатор для D.
 
@@ -20,11 +27,43 @@
   | con3 g => foo (g (foo (g 100)))
 -}
 
+\func D-elim (P : D -> \Type)
+             (c1 : \Pi (n : Nat) -> P (con1 n))
+             (c2 : \Pi (d1 : D) (d2 : D) -> P d1 -> P d2 -> P (con2 d1 d2))
+             (c3 : \Pi (f : Nat -> D) (g : \Pi (n : Nat) -> P (f n)) -> P (con3 f))
+             (x : D) : P x \elim x
+  | con1 n => c1 n
+  | con2 d1 d2 => c2 d1 d2 (D-elim P c1 c2 c3 d1) (D-elim P c1 c2 c3 d2)
+  | con3 f => c3 f (\lam n => D-elim P c1 c2 c3 (f n))
+
+\func D-rec (P : \Type)
+            (c1 : Nat -> P)
+            (c2 : D -> D -> P -> P -> P)
+            (c3 : (Nat -> D) -> (Nat -> P) -> P)
+            (x : D): P => D-elim (\lam _ => P) c1 c2 c3 x
+
+\func foo (d : D) : Nat => D-rec Nat (\lam x => x) (\lam _ _ res1 res2 => res1 + res2) (\lam _ g => g (g 100)) d
+
 -- 4. Определите рекурсор и элиминатор для List.
+
+\func List-elim {A : \Type}
+                (P : List A -> \Type)
+                (z : P nil)
+                (c : \Pi (a : A) (xs : List A) -> P xs -> P (cons a xs))
+                (xs : List A) : P xs \elim xs
+  | nil => z
+  | cons a xs => c a xs (List-elim P z c xs)
+
+\func List-rec {A : \Type}
+               (P : \Type)
+               (z : P)
+               (c : A -> List A -> P -> P)
+               (xs : List A) : P => List-elim (\lam _ => P) z c xs
 
 -- 5. Докажите pmap при помощи паттерн матчинга с idp.
 
-\func pmap {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a' => {?}
+\func pmap {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a' \elim p
+  | idp => idp
 
 -- Optional:
 -- 6. У оператора J есть другая форма, которую мы будем называть Jalt. Докажите, что J и Jalt эквивалентны, то есть выразите одно через другое и наоборот.
@@ -33,7 +72,7 @@
 
 \func Jalt {A : \Type} (B : \Pi (a a' : A) -> a = a' -> \Type)
            (b : \Pi (a : A) -> B a a idp)
-           {a a' : A} (p : a = a') : B a a' p => {?}
+           {a a' : A} (p : a = a') : B a a' p => J (B a) (b a) p
 
 -- Выразите J через Jalt. Можно пользоваться только Jalt, idp и всем, что через них выражается.
 -- Hint:
@@ -41,18 +80,26 @@
 -- b. Докажите, что тип \Sigma (x : A) (a = x) одноэлементный, то есть, что для любого p : \Sigma (x : A) (a = x) верно, что (x,idp) = p.
 -- c. Используя эти две конструкции, легко определить J.
 
-\func transport'' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' => {?}
+\func transport'' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' =>
+  (Jalt (\lam x y _ => B x -> B y) (\lam _ b' => b')  p) b
 
-\func sigma-contr {A : \Type} {a : A} (p : \Sigma (x : A) (a = x)) : (a,idp) = {\Sigma (x : A) (a = x)} p => {?}
+\func sigma-contr {A : \Type} {a : A} (p : \Sigma (x : A) (a = x)) : (a,idp) = {\Sigma (x : A) (a = x)} p =>
+  Jalt (\lam x y p' => (x, idp) = {\Sigma (z : A) (x = z)} (y, p')) (\lam _ => idp) p.2
 
 \func J' {A : \Type} {a : A} (B : \Pi (a' : A) -> a = a' -> \Type)
          (b : B a idp)
-         {a' : A} (p : a = a') : B a' p => {?}
+         {a' : A} (p : a = a') : B a' p => transport'' (\lam x => B x.1 x.2) (sigma-contr (a', p)) b
 
 -- 7. Докажите, что vnil является нейтральным элементом для v++.
 
-\func vnil-rightId {A : \Type} {n : Nat} (xs : Vec A n) : transport (Vec A) (+-comm 0 n) (xs v++ vnil) = xs => {?}
+\func vnil-rightId {A : \Type} {n : Nat} (xs : Vec A n) : transport (Vec A) (+-comm 0 n) (xs v++ vnil) = xs \elim n, xs
+  | 0, vnil => idp
+  | suc n, vcons a xs => v++-assoc.vcons-lem (+-comm 0 n) (xs v++ vnil) a *> (pmap (vcons a) (vnil-rightId xs))
 
 -- 8. Докажите, что 0 не равно suc x, не используя паттерн матчинг на равенстве.
 
-\func zero/=suc (x : Nat) (p : 0 = suc x) : Empty => {?}
+\func zero/=suc (x : Nat) (p : 0 = suc x) : Empty => transport nat-to-type p () \where {
+  \func nat-to-type (x : Nat) : \Type
+    | zero => \Sigma
+    | suc _ => Empty
+}
