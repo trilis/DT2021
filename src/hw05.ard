@@ -2,7 +2,8 @@
 \import hw04 (zero/=suc)
 \import lect01 (-)
 \import lect02 (id')
-\import lect05 (filter, foo, funExt)
+\import lect03 (+-comm)
+\import lect05 (<=-step, LessOrEq, LessOrEq', filter, foo, funExt, lessOrEq, lessOrEq', suc<=suc, zero<=_)
 
 -- 1. Докажите, что (\lam x => not (not x)) = (\lam x => x).
 
@@ -54,6 +55,39 @@
 -- Optional:
 -- 10. Докажите эквивалентность четырех различных определений LessOrEq: lessOrEq, lessOrEq', LessOrEq и LessOrEq'.
 
+\func lessOrEq->lessOrEq' (n m : Nat) (k : lessOrEq n m) : lessOrEq' n m \elim n, m
+  | 0, _ => ()
+  | suc n, 0 => suc/=0 (+-comm k.1 (suc n) *> k.2)
+  | suc n, suc m => lessOrEq->lessOrEq' n m (k.1, +-comm n k.1 *> (pmap (\lam n => \case (n : Nat)  \with {
+    | 0 => 0
+    | suc n => n
+  }) (+-comm k.1 (suc n) *> k.2)))
+
+\func lessOrEq'->LessOrEq (n m : Nat) (k : lessOrEq' n m) : LessOrEq n m \elim n, m
+  | 0, _ => zero<=_
+  | suc n, 0 => absurd k
+  | suc n, suc m => suc<=suc (lessOrEq'->LessOrEq n m k)
+
+\func LessOrEq->LessOrEq' (n m : Nat) (k : LessOrEq n m) : LessOrEq' n m
+  | 0, 0, zero<=_ => LessOrEq'.<=-refl idp
+  | 0, suc m, zero<=_ => <=-step (LessOrEq->LessOrEq' 0 m zero<=_)
+  | suc n, suc m, suc<=suc k => suc-suc-lem n m (LessOrEq->LessOrEq' n m k) \where {
+  \func suc-suc-lem (n m : Nat) (k : LessOrEq' n m) : LessOrEq' (suc n) (suc m)
+    | 0, 0, LessOrEq'.<=-refl p => LessOrEq'.<=-refl idp
+    | suc n, suc m, LessOrEq'.<=-refl p => LessOrEq'.<=-refl (pmap suc p)
+    | 0, suc m, LessOrEq'.<=-refl p => absurd (zero/=suc m p)
+    | suc n, 0, LessOrEq'.<=-refl p => absurd (zero/=suc n (sym p))
+    | 0, suc m, <=-step k => <=-step (suc-suc-lem 0 m k)
+    | suc n, suc m, <=-step k => <=-step (suc-suc-lem (suc n) m k)
+}
+
+\func LessOrEq'->lessOrEq (n m : Nat) (k : LessOrEq' n m) : lessOrEq n m
+  | 0, 0, LessOrEq'.<=-refl p => (0, idp)
+  | 0, suc m, _ => (suc m, pmap suc (+-comm 0 m *> idp))
+  | suc n, 0, LessOrEq'.<=-refl p => absurd ((zero/=suc n) (sym p))
+  | suc n, suc m, LessOrEq'.<=-refl p => (0, p)
+  | suc n, suc m, <=-step k => \let k' => (LessOrEq'->lessOrEq (suc n) m k) \in (suc k'.1, pmap suc k'.2)
+
 -- 11. Определите рефлексивное транзитивное замыкание отношения.
 --     То есть ReflTransClosure R -- это минимальное рефлексивное и транзитивное отношение, содержащее R.
 
@@ -97,7 +131,7 @@
   | cons a xs => if (p a) (cons a (filter' p xs)) (filter' p xs)
 
 \func <=-step-lem {n m : Nat} (n<=m : n Nat.<= m) : n Nat.<= suc m \elim n, m, n<=m
-  | 0, m, zero<=_ => Nat.zero<=_
+  | 0, m, Nat.zero<=_ => Nat.zero<=_
   | suc n, suc m, Nat.suc<=suc n<=m => Nat.suc<=suc (<=-step-lem n<=m)
 
 \func filter-lem {A : \Type} (p : A -> Bool) (xs : List A) : length (filter' p xs) <= length xs \elim xs
