@@ -1,46 +1,55 @@
 \import Utils
+\import hw04 (zero/=suc)
+\import lect01 (-)
+\import lect02 (id')
+\import lect05 (filter, foo, funExt)
 
 -- 1. Докажите, что (\lam x => not (not x)) = (\lam x => x).
 
-\func notNotId : (\lam x => not (not x)) = (\lam x => x) => {?}
+\func notNotId : (\lam x => not (not x)) = (\lam x => x) => funExt (\lam _ => Bool) (\lam x => sym (foo id' x))
 
 -- 2. Докажите, что fac не равен suc.
 
-\open Nat(*)
+\open Nat (*)
 
 \func fac (n : Nat) : Nat
   | 0 => 1
   | suc n => suc n * fac n
 
-\func fac/=suc (p : fac = suc) : Empty => {?}
+\func fac/=suc (p : fac = suc) : Empty => zero/=suc 0 (pmap (\lam x => x 1 - 1) p)
 
 -- 3. Докажите, что left = right, не используя transport, coe и паттерн матчинг с idp.
 
-\func left=right : left = right => {?}
+\func left=right : left = right => path id'
 
 -- 4. Докажите, что если a = a' и b = b', то (a,b) = (a',b'), не используя transport, coe и паттерн матчинг с idp.
 
-\func pairEq {A B : \Type} {a a' : A} {b b' : B} (p : a = a') (q : b = b') : (a,b) = (a',b') => {?}
+\func pairEq {A B : \Type} {a a' : A} {b b' : B} (p : a = a') (q : b = b') : (a,b) = (a',b') =>
+  path (\lam i => (p @ i, q @ i))
 
 -- 5. Докажите, что если p = p', то p.1 = p'.1, не используя transport, coe и паттерн матчинг с idp.
 
-\func projEq {A : \Type} (B : A -> \Type) {p p' : \Sigma (x : A) (B x)} (t : p = p') : p.1 = p'.1 => {?}
+\func projEq {A : \Type} (B : A -> \Type) {p p' : \Sigma (x : A) (B x)} (t : p = p') : p.1 = p'.1 =>
+  path (\lam i => (t @ i).1)
 
 -- 6. Докажите pmap2, не используя transport, coe и паттерн матчинг с idp.
 
-\func pmap2' {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' => {?}
+\func pmap2' {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' =>
+  path (\lam i => f (p @ i) (q @ i))
 
 -- 7. Мы видели как определить transport через coe. Определите частный случай coe через transport.
 
-\func coe0 (A : I -> \Type) (a : A left) : A right => {?}
+\func coe0 (A : I -> \Type) (a : A left) : A right => transport A left=right a
 
 -- 8. Определите функцию B right -> B left.
 
-\func Itr' {B : I -> \Type} (b : B right) : B left => {?}
+\func Itr' {B : I -> \Type} (b : B right) : B left => transport B (sym left=right) b
 
 -- 9. Определите предикат принадлежности элемента списку.
 
-\data In {A : \Type} (a : A) (xs : List A)
+\data In {A : \Type} (a : A) (xs : List A) \elim a, xs
+  | a, cons b xs => head (a = b)
+  | a, cons b xs => tail (In a xs)
 
 -- Optional:
 -- 10. Докажите эквивалентность четырех различных определений LessOrEq: lessOrEq, lessOrEq', LessOrEq и LessOrEq'.
@@ -49,22 +58,63 @@
 --     То есть ReflTransClosure R -- это минимальное рефлексивное и транзитивное отношение, содержащее R.
 
 \data ReflTransClosure {A : \Type} (R : A -> A -> \Type) (x y : A)
+  | crefl (x = y)
+  | ctrans (z : A) (R x z) (ReflTransClosure R z y)
 
 -- 12. Докажите, что если R уже рекфлексивно и транзитивно, то ReflTransClosure R эквивалентно R.
 
 \func ReflTransClosure-lem {A : \Type} (R : A -> A -> \Type) (refl : \Pi (x : A) -> R x x) (trans : \Pi (x y z : A) -> R x y -> R y z -> R x z)
-  : \Pi (x y : A) -> R x y <-> ReflTransClosure R x y
-  => {?}
+  : \Pi (x y : A) -> R x y <-> ReflTransClosure R x y => \lam x y => (f1 R refl trans x y, f2 R refl trans x y) \where {
+  \func f1 {A : \Type} (R : A -> A -> \Type) (refl : \Pi (x : A) -> R x x) (trans : \Pi (x y z : A) -> R x y -> R y z -> R x z) (x y : A) (r : R x y) : ReflTransClosure R x y =>
+    ctrans y (trans x y y r (refl y)) (crefl idp)
+  \func f2 {A : \Type} (R : A -> A -> \Type) (refl : \Pi (x : A) -> R x x) (trans : \Pi (x y z : A) -> R x y -> R y z -> R x z) (x y : A) (cl : ReflTransClosure R x y) : R x y \elim cl
+    | crefl p => transport (\lam z => R x z) p (refl x)
+    | ctrans z r r1 => trans x z y r (f2 R refl trans z y r1)
+}
 
 -- 13. Определите предикат Sublist xs ys на списках, означающий "список xs является подсписком ys".
+\data Sublist {A : \Type} (xs : List A) (ys : List A) \elim xs, ys
+  | nil, _ => empty
+  | xs, (cons y ys) => skip (Sublist xs ys)
+  | (cons x xs), (cons y ys) => match (x = y) (Sublist xs ys)
 
 -- 14. Докажите, что Sublist (filter p xs) xs для любых p и xs.
+\func sublist-filter {A : \Type} (p : A -> Bool) (xs : List A) : Sublist (filter p xs) (xs) \elim xs
+  | nil => empty
+  | cons a xs => \case p a \as b \return Sublist (\case b \with {
+    | true => cons a (filter p xs)
+    | false => filter p xs
+  }) (cons a xs) \with {
+    | true => match idp (sublist-filter p xs)
+    | false => skip (sublist-filter p xs)
+  }
 
 -- 15. Определите filter через if, а не через \case.
 --     Докажите для этой версии filter лемму filter-lem.
 
-\func filter' {A : \Type} (p : A -> Bool) (xs : List A) : List A => {?}
+\func filter' {A : \Type} (p : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | cons a xs => if (p a) (cons a (filter' p xs)) (filter' p xs)
 
-\func filter-lem {A : \Type} (p : A -> Bool) (xs : List A) : length (filter' p xs) Nat.<= length xs => {?}
+\func <=-step-lem {n m : Nat} (n<=m : n Nat.<= m) : n Nat.<= suc m \elim n, m, n<=m
+  | 0, m, zero<=_ => Nat.zero<=_
+  | suc n, suc m, Nat.suc<=suc n<=m => Nat.suc<=suc (<=-step-lem n<=m)
+
+\func filter-lem {A : \Type} (p : A -> Bool) (xs : List A) : length (filter' p xs) <= length xs \elim xs
+  | nil => Nat.zero<=_
+  | cons a xs => \case p a \as b \return length (if b (cons a (filter' p xs)) (filter' p xs)) <= suc (length xs) \with {
+    | true => Nat.suc<=suc (filter-lem p xs)
+    | false => <=-step-lem (filter-lem p xs)
+  }
 
 -- 16. Закончите определение функции \func BoolFuncLem (f : Bool -> Bool) (x : Bool) : f (f (f x)) = f x из лекции.
+
+\func BoolFuncLem (f : Bool -> Bool) (x : Bool) : f (f (f x)) = f x =>
+\case \elim x, f true \as b, f false \as c, idp : f true = b, idp : f false = c \with {
+  | true, true, _, p, _ => pmap f (pmap f p *> p)
+  | false, _, false, _, q => pmap f (pmap f q *> q)
+  | true, false, true, p, q => pmap f (pmap f p *> q)
+  | false, false, true, p, q => pmap f (pmap f q *> p)
+  | true, false, false, p, q => (pmap f (pmap f p)) *> (pmap f q) *> (q *> (sym p))
+  | false, true, true, p, q => (pmap f (pmap f q)) *> (pmap f p) *> (p *> (sym q))
+}
