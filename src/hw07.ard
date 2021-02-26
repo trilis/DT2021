@@ -1,31 +1,110 @@
+\import Meta
+\import Paths.Meta
 \import Utils
+\import hw02 (tail)
+\import hw04 (zero/=suc)
+\import lect05 (filter, funExt)
 \import lect06 (Functor)
 \import lect07
-\open Nat(+,*)
+\open Nat (+, *)
 
 -- 1. Реализуйте функцию filter и докажите ее корректность, то есть, что выполнены следующие условия:
 --    * filter p xs является подсписком xs
 --    * Все элементы filter p xs удовлетворяют предикату p
 --    * Любой подсписок xs с тем же свойством является подсписком filter p xs
 
+\data Sublist {A : \Type} (xs ys : List A) \elim xs, ys
+  | nil, _ => sublist-nil
+  | xs, cons y ys => sublist-skip (Sublist xs ys)
+  | cons x xs, cons y ys => sublist-match (x = y) (Sublist xs ys)
+
+\data Filtered {A : \Type} (f : A -> Bool) (xs : List A) \elim xs
+  | nil => filtered-nil
+  | cons x xs => filtered-cons (f x = true) (Filtered f xs)
+
+\func filter-sublist {A : \Type} (f : A -> Bool) (xs : List A) : Sublist (filter f xs) xs \elim xs
+  | nil => sublist-nil
+  | cons a xs => mcases \with {
+    | true => sublist-match idp (filter-sublist f xs)
+    | false => sublist-skip (filter-sublist f xs)
+  }
+
+\func filter-filtered {A : \Type} (f : A -> Bool) (xs : List A) : Filtered f (filter f xs) \elim xs
+  | nil => filtered-nil
+  | cons a xs => \case f a \as k, idp : f a = k \return Filtered f (\case k \with {
+    | true => cons a (filter f xs)
+    | false => filter f xs
+  }) \with {
+    | true, p => filtered-cons p (filter-filtered f xs)
+    | false, p => filter-filtered f xs
+  }
+
+\func filter-complete {A : \Type} (f : A -> Bool) (xs : List A) (ys : List A) (sublist : Sublist ys xs) (filtered : Filtered f ys) : Sublist ys (filter f xs) \elim xs, ys, sublist, filtered
+  | nil, nil, _, _ => sublist-nil
+  | cons a xs, nil, _, _ => mcases sublist-nil
+  | cons x xs, cons y ys, sublist-skip sublist, filtered => mcases \with {
+    | true => sublist-skip (filter-complete f xs (cons y ys) sublist filtered)
+    | false => filter-complete f xs (cons y ys) sublist filtered
+  }
+  | cons x xs, cons y ys, sublist-match p sublist, filtered-cons t filtered => run {
+    rewrite p at t,
+    rewrite t,
+    sublist-match p (filter-complete f xs ys sublist filtered)
+  }
+
 -- 2. Докажите, что предикат isEven разрешим.
 
 \func isEven (n : Nat) => \Sigma (k : Nat) (n = 2 * k)
 
-\func isEven-dec : DecPred isEven => {?}
+\func isEven-dec : DecPred isEven => \lam n => helper n \where {
+  \func helper (n : Nat): Decide (isEven n)
+    | 0 => yes (0, idp)
+    | 1 => no (\lam p => \case p.1 \as k, p.2 : 1 = 2 * k \with {
+      | 0, ()
+    })
+    | suc (suc n) => \case helper n \with {
+      | yes (k, p) => yes (k + 1, pmap suc (pmap suc p))
+      | no f => no (\lam p => f (\case p.1 \as k, p.2 : suc (suc n) = 2 * k \with {
+        | suc k, p1 => (k, pmap pred (pmap pred p1))
+      }))
+    }
+}
 
 -- 3. Докажите, что если равенство элементов A разрешимо, то и равенство элементов List A тоже разрешимо.
 
 \instance ListEq {A : \Type} (dec : Eq A) : Eq (List A)
-  | decideEq => {?}
+  | decideEq => helper \where {
+  \func helper {A : \Type} {dec : Eq A} (xs : List A) (ys : List A) : Decide (xs = ys)
+    | nil, nil => yes idp
+    | nil, cons y ys => no (\case __ \with {})
+    | cons x xs, nil => no (\case __ \with {})
+    | cons x xs, cons y ys => \case decideEq x y \with {
+      | yes x=y => \case helper xs ys \with {
+        | yes xs=ys => rewrite x=y (yes (pmap (cons y) xs=ys))
+        | no xs/=ys => no (\lam xs=ys => xs/=ys (pmap tail xs=ys))
+      }
+      | no x/=y => no (\lam xs=ys => x/=y (pmap (headDef x) xs=ys))
+    }
+}
 
 -- 4. Докажите, что функции FromBoolToDec и FromDecToBool взаимно обратны.
 
-\func bdb {A : \Type} (p : A -> Bool) : FromDecToBool (FromBoolToDec p) = p => {?}
+\func bdb {A : \Type} (p : A -> Bool) : FromDecToBool (FromBoolToDec p) = p => funExt (\lam _ => Bool) (\lam a => \case p a \as k, idp : p a = k \with {
+  | true, p1 => mcases \with {
+    | yes _ => sym p1
+    | no f => absurd (f (transport (\lam x => T x) (sym p1) ()))
+  }
+  | false, p1 => mcases \with {
+    | yes t => absurd (transport (\lam x => T x) p1 t)
+    | no _ => sym p1
+  }
+})
 
 -- Мы не можем доказать, что FromBoolToDec (FromDecToBool P) = P, но мы можем доказать более слабое утверждение: эти предикаты логически эквивалентны.
 -- Для этого введем эквивалентность предикатов.
 
 \func dbd {A : \Type} (P : \Sigma (P : A -> \Type) (DecPred P))
-  : \Pi (x : A) -> (FromBoolToDec (FromDecToBool P)).1 x <-> P.1 x
-  => {?}
+  : \Pi (x : A) -> (FromBoolToDec (FromDecToBool P)).1 x <-> P.1 x => \lam x => unfold (FromBoolToDec, FromDecToBool) (mcases \with {
+  | yes a => ((\lam _ => a), (\lam _ => ()))
+  | no b => (absurd, b)
+})
