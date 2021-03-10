@@ -1,19 +1,73 @@
+\import Algebra.Meta
 \import Data.List
+\import Data.Or
+\import Logic.Meta
+\import Meta
 \import Order.LinearOrder
-\import Utils (Maybe, just, maybe, nothing)
-\import lect07(Decide)
+\import Paths.Meta
+\import Utils (*>, <->, Maybe, absurd, just, maybe, nothing, pmap, sym)
+\import hw05
+\import lect02 (Empty)
+\import lect05 (funExt)
+\import lect07 (Decide, no, yes)
 \import lect08
 \open LinearOrder
+\open Nat \hiding (<=)
 
 -- 1. Докажите, что Perm l1 l2 тогда и только тогда, когда Insertion.sort l1 = Insertion.sort l2.
 
+\func perm-sym {A : \Type} {l1 l2 : List A} (p : Perm l1 l2) : Perm l2 l1 \elim l1, l2, p
+  | nil, nil, perm-nil => perm-nil
+  | l1, l2, perm-trans p1 p2 => perm-trans (perm-sym p2) (perm-sym p1)
+  | :: a l1, :: b l2, perm-:: e p => perm-:: (sym e) (perm-sym p)
+  | :: a (:: a' l1), :: b (:: b' l2), perm-swap a=b' a'=b l1=l2 => perm-swap (sym a'=b) (sym a=b') (sym l1=l2)
+
+\func perm<->sortedEq {A : Dec} (l1 : List A) (l2 : List A) : Perm l1 l2 <-> (Insertion.sort l1 = Insertion.sort l2) =>
+  (f1, f2 l1 l2) \where {
+  \func f1 {A : Dec} {l1 l2 : List A} (p : Perm l1 l2) : Insertion.sort l1 = Insertion.sort l2 \elim l1, l2, p
+    | nil, nil, perm-nil => idp
+    | l1, l2, perm-trans p1 p2 => f1 p1 *> f1 p2
+    | :: a l1, :: b l2, perm-:: e p => run {
+      rewrite e,
+      pmap (Insertion.sort.insert b) (f1 p)
+    }
+    | :: a (:: a' l1), :: b (:: b' l2), perm-swap a=b' a'=b l1=l2 => run {
+      rewrite a=b',
+      rewrite a'=b,
+      rewrite l1=l2,
+      Insertion.sort-perm.insert-comm b' b (Insertion.sort l2)
+    }
+
+  \func f2 {A : Dec} (l1 : List A) (l2 : List A) (e : Insertion.sort l1 = Insertion.sort l2) : Perm l1 l2 =>
+    perm-trans (Insertion.sort-perm l1) (rewrite e (perm-sym (Insertion.sort-perm l2)))
+}
+
 -- 2. Докажите, что спецификация "результат является перестановкой входа и отсортирован" является полной для функции sort.
 
-\func completeness {A : Dec} (sort : List A -> List A) (l : List A) (p : Perm l (sort l)) (s : Sorted (sort l)) : sort l = Insertion.sort l
-  => {?}
+\func completeness {A : Dec} (sort : List A -> List A) (l : List A) (p : Perm l (sort l)) (s : Sorted (sort l)) : sort l = Insertion.sort l =>
+  rewrite ((perm<->sortedEq l (sort l)).1 p) (sym (insertion-sort-idempotent (sort l) s)) \where {
+  \func insertion-sort-idempotent {A : Dec} (l : List A) (s : Sorted l) : Insertion.sort l = l \elim l, s
+    | nil, sorted-nil => idp
+    | :: x xs, sorted-cons le s => (pmap (Insertion.sort.insert x) (insertion-sort-idempotent xs s)) *>
+    (\case \elim x, \elim xs, \elim le \with {
+      | x, nil, _ => idp
+      | x, :: a xs, _ => mcases \with {
+        | inl x<a => contradiction
+        | inr a<=x => idp
+      }
+    })
+}
 
 -- 3. Определите факториал через хвостовую рекурсию.
 --    Докажите, что он равен обычному определению факториала.
+
+\func fac-tailrec (n : Nat) => fac-tailrec' n 1 \where {
+  \func fac-tailrec' (n acc : Nat) : Nat \elim n
+    | 0 => acc
+    | suc n => fac-tailrec' n (suc n * acc)
+}
+
+\func fac-tailrec=fac (n : Nat) : fac n = fac-tailrec n => {?}
 
 -- 4. Закончите определение \instance Monad для Term.
 
@@ -29,16 +83,27 @@
   | >>=-left {A B : \Type} (a : A) (k : A -> F B) : (return a >>= k) = k a
   | >>=-right {A : \Type} (m : F A) : (m >>= return) = m
   | >>=-assoc {A B C : \Type} (m : F A) (k : A -> F B) (l : B -> F C) : ((m >>= k) >>= l) = (m >>= (\lam a => k a >>= l))
-  | fmap => {?}
-  | fmap-id => {?}
-  | fmap-comp => {?}
+  | fmap {A B : \Type} (f : A -> B) (fa : F A) => fa >>= (\lam a => return (f a))
+  | fmap-id {A : \Type} (fa : F A) => >>=-right fa
+  | fmap-comp {A B C : \Type} (f : A -> B) (g : B -> C) (y : F A) =>
+    pmap (\lam x => y >>= x) (funExt (\lam _ => F C) (\lam a => sym (>>=-left (f a) (\lam b => return (g b)) )))
+      *> (sym (>>=-assoc y (\lam x => return (f x)) (\lam x => return (g x))))
 
 \instance MaybeMonad : Monad Maybe
   | return => just
-  | >>= m k => maybe nothing k m
-  | >>=-left => {?}
-  | >>=-right => {?}
-  | >>=-assoc => {?}
+  | >>= fa f => \case fa \with {
+    | nothing => nothing
+    | just a => f a
+  }
+  | >>=-left f a => idp
+  | >>=-right fa => \case \elim fa \with {
+    | nothing => idp
+    | just a => idp
+  }
+  | >>=-assoc fa f g => \case \elim fa \with {
+    | nothing => idp
+    | just a => idp
+  }
 
 \func termMap {A B : \Type} (f : A -> B) (t : Term A) : Term B \elim t
   | var v => var (f v)
@@ -55,8 +120,8 @@
   | lam t => lam (termMap just t)
 -}
 
-\func liftM {A B : \Type} (k : A -> Term B) (m : Maybe A) : Term (Maybe B)
-  => maybe (var nothing) (\lam a => termMap just (k a)) m
+\func liftM {A B : \Type} (k : A -> Term B) (m : Maybe A) : Term (Maybe B) =>
+  maybe (var nothing) (\lam a => termMap just (k a)) m
 
 \instance TermMonad : Monad Term
   | return => var
@@ -66,44 +131,152 @@
     | app t1 t2 => app (t1 >>= k) (t2 >>= k)
     | lam t => lam (t >>= liftM k)
   }
-  | >>=-left => {?}
-  | >>=-right => {?}
-  | >>=-assoc => {?}
+  | >>=-left _ _ => idp
+  | >>=-right => >>=-right'
+  | >>=-assoc => >>=-assoc'
+  \where {
+    \func liftMVar=var {V : \Type} (m : Maybe V) : liftM var m = var m \elim m
+      | nothing => idp
+      | just a => idp
+
+    \func >>=-right' {V : \Type} (m : Term V) : (m >>= var) = m \elim m
+      | var v => idp
+      | unit => idp
+      | app m1 m2 => run {
+        rewrite (>>=-right' m1),
+        rewrite (>>=-right' m2),
+        idp
+      }
+      | lam m => run {
+        rewrite (funExt (\lam _ => Term (Maybe V)) {liftM var} {var} liftMVar=var),
+        pmap lam (>>=-right' m)
+      }
+
+    \func >>=-assoc' {V U W : \Type} (m : Term V) (k : V -> Term U) (l : U -> Term W) :
+      ((m >>= k) >>= l) = (m >>= (\lam a => k a >>= l)) \elim m
+      | var v => idp
+      | unit => idp
+      | app m1 m2 => run {
+        rewrite (>>=-assoc' m1 k l),
+        rewrite (>>=-assoc' m2 k l),
+        idp
+      }
+      | lam m => pmap lam {?}
+  }
 
 -- 5. Определите отношение многошаговой редукции на Term.
 
-\func Red {V : \Type} (t s : Term V) : \Type => {?}
+\func Red {V : \Type} (t s : Term V) : \Type => ReflTransClosure Red1 t s
+
+\func Red1->Red {V : \Type} {t s : Term V} (r : Red1 t s) : Red t s => ctrans s r (crefl idp)
 
 -- 6. Стратегия редукции -- это функция, которая каждому терму сопоставляет либо некоторый терм, к которому он редуцируется за 1 шаг, либо доказательство, что таких термов нет.
 --    Определите любую стратегию редукции.
 
-\func strategy {V : \Type} (t : Term V) : Decide (\Sigma (s : Term V) (Red1 t s)) => {?}
+\func strategy {V : \Type} (t : Term V) : Decide (\Sigma (s : Term V) (Red1 t s)) \elim t
+  | var v => no (\lam x => \case x.2 \with {})
+  | unit => no (\lam x => \case x.2 \with {})
+  | app t1 t2 => \case strategy t1, strategy t2 \with {
+    | yes a, _ => yes (app a.1 t2, appLeft a.2 idp)
+    | _, yes a => yes (app t1 a.1, appRight idp a.2)
+    | no c1, no c2 => \case t1 \as t1', idp : t1 = t1', c1 : \Sigma (s : Term V) (Red1 t1' s) -> Utils.Empty
+                      \return Decide (\Sigma (s : Term V) (Red1 (app t1' t2) s)) \with {
+      | var v, p, c1' => no (\lam x => \case x.1 \as x1, x.2 : Red1 (app (var v) t2) x1 \with {
+        | var v, beta f p1 p2 => contradiction
+        | unit, beta f p1 p2 => contradiction
+        | app x1 x2, appLeft r p1 => contradiction
+        | app x1 x2, appRight p1 r => c2 (x2, r)
+        | app x1 x2, beta f p1 p2 => contradiction
+        | lam x1, beta f p1 p2 => contradiction
+      })
+      | unit, p, c1' => no (\lam x => \case x.1 \as x1, x.2 : Red1 (app unit t2) x1 \with {
+        | var v, beta f p1 p2 => contradiction
+        | unit, beta f p1 p2 => contradiction
+        | app x1 x2, appLeft r p1 => contradiction
+        | app x1 x2, appRight p1 r => c2 (x2, r)
+        | app x1 x2, beta f p1 p2 => contradiction
+        | lam x1, beta f p1 p2 => contradiction
+      })
+      | app t11 t12, p, c1' => no (\lam x => \case x.1 \as x1, x.2 : Red1 (app (app t11 t12) t2) x1 \with {
+        | var v, beta f p1 p2 => contradiction
+        | unit, beta f p1 p2 => contradiction
+        | app x1 x2, appLeft r p1 => c1' (x1, r)
+        | app x1 x2, appRight p1 r => c2 (x2, r)
+        | app x1 x2, beta f p1 p2 => contradiction
+        | lam x1, beta f p1 p2 => contradiction
+      })
+      | lam t1', p, _ => yes ((t1' >>= maybe t2 var), beta t1' idp idp)
+    }
+  }
+  | lam t => \case strategy t \with {
+    | yes x => yes (lam x.1, lamRed x.2)
+    | no c => no (\lam x => \case x.1 \as s, x.2, idp : s = x.1 \with {
+      | var v, r, p => run {
+        rewrite (sym p) at r,
+        contradiction
+      }
+      | unit, r, p => run {
+        rewrite (sym p) at r,
+        contradiction
+      }
+      | app s1 s2, r, p => run {
+        rewrite (sym p) at r,
+        contradiction
+      }
+      | lam s, r, p => run {
+        rewrite (sym p) at r,
+        c (s, \case r \with {
+          | lamRed r1 => r1
+        })
+      }
+    })
+  }
 
 -- 7. Докажите, что подтермы достижимого терма достижимы.
 
-\func appAccLeft {V : \Type} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 t
-  => {?}
+\func appAccLeft {V : \Type} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 t \elim a
+  | acc f => acc (\lam a' r => appAccLeft (f (app a' s) (appLeft r idp)))
 
-\func appAccRight {V : \Type} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 t
-  => {?}
+\func appAccRight {V : \Type} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 s \elim a
+  | acc f => acc (\lam a' r => appAccRight (f (app t a') (appRight idp r)))
 
-\func subLamAcc {V : \Type} {t : Term (Maybe V)} (a : Acc Red1 (lam t)) : Acc Red1 t
-  => {?}
+\func subLamAcc {V : \Type} {t : Term (Maybe V)} (a : Acc Red1 (lam t)) : Acc Red1 t \elim a
+  | acc f => acc (\lam a' r => subLamAcc (f (lam a') (lamRed r)))
 
 -- 8. Докажите следующую обобщенную лемму о подстановке и выведите из нее обычную версию: если Г, x : A |- b : B и Г |- a : A, то Г |- b[a/x] : B.
 
 \func substLem {U V : \Type} (ctx : U -> Type) (b : Term U) (B : Type) (h : hasType ctx b B)
                (ctx' : V -> Type) (a : U -> Term V) (h' : \Pi (u : U) -> hasType ctx' (a u) (ctx u))
-  : hasType ctx' (b >>= a) B
-  => {?}
+  : hasType ctx' (b >>= a) B \elim b, B, h
+  | unit, Unit, unitType => unitType
+  | var v, T, varType p => {?}
+  | app f a1, B, appType h1 h2 => {?}
+  | lam t, Arr A B, lamType h => {?}
 
-\func substLem1 => {?}
+\func substLem1 {U : \Type} (ctx : U -> Type) (a : Term U) (b : Term (Maybe U)) (A B : Type) (h1 : hasType (maybe A ctx) b B) (h2 : hasType ctx a A)
+  : hasType ctx (b >>= maybe a var) B =>
+  substLem (maybe A ctx) b B h1 ctx (maybe a var) (\lam u => \case \elim u \with {
+    | nothing => h2
+    | just u => varType idp
+  })
 
 -- 9. Докажите, что если Г |- a : A и Red a a', то Г |- a' : A
 
 \func redLem {V : \Type} {ctx : V -> Type} {a a' : Term V} (r : Red a a') {A : Type} (h : hasType ctx a A)
-  : hasType ctx a' A
-  => {?}
+  : hasType ctx a' A \elim a, r, A, h
+  | var v, crefl p, _, varType p1 => rewriteI p (varType p1)
+  | var v, ctrans z () r1, _, _
+  | unit, crefl p, Unit, unitType => rewriteI p (unitType)
+  | unit, ctrans z () r1, _, _
+  | app a1 a2, crefl p, _, appType h1 h2 => rewriteI p (appType h1 h2)
+  | app a1 a2, ctrans z r r1, _, appType h1 h2 => redLem r1 (redLemStep r (appType h1 h2))
+  | lam a, crefl p, _, h => rewriteI p h
+  | lam a, ctrans z r r1, A, h => redLem r1 (redLemStep r h)
+  \where {
+    \func redLemStep {V : \Type} {ctx : V -> Type} {a a' : Term V} (r : Red1 a a') {A : Type} (h : hasType ctx a A)
+      : hasType ctx a' A \elim a, a', r, A, h
+
+  }
 
 -- Optional
 -- 10. Докажите typeableInterp из лекции
